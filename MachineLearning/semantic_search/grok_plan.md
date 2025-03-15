@@ -381,7 +381,222 @@ Document: Swimming is excellent for cardiovascular health. | Similarity: 0.8102
 - **Indexing**: Enables fast retrieval from large datasets.
 - **Retrieval**: Finds relevant items using similarity searches.
 
-This guide has equipped you with a deep understanding of semantic search and its components. You’ve built a functional search engine, mastering embeddings, indexing, and retrieval—skills critical for your future in AI and NLP. If you have the necessary libraries installed, you can run the code; otherwise, study the logic to apply it in other contexts. Your journey in advanced search technologies starts here—congratulations!
+## Hands-On Coding Exercises
+
+### Exercise 1: Basic Embeddings and Similarity
+Build a simple embedding comparison tool that:
+1. Takes two sentences as input
+2. Generates their embeddings using Sentence-BERT
+3. Computes and explains their similarity score
+
+```python
+def compare_sentences(sentence1, sentence2):
+    # Initialize the model
+    model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    
+    # Generate embeddings
+    embedding1 = model.encode([sentence1])[0]
+    embedding2 = model.encode([sentence2])[0]
+    
+    # Calculate similarity
+    similarity = util.pytorch_cos_sim(
+        embedding1.reshape(1, -1), 
+        embedding2.reshape(1, -1)
+    ).item()
+    
+    return {
+        'similarity': similarity,
+        'interpretation': interpret_similarity(similarity)
+    }
+    
+def interpret_similarity(score):
+    if score > 0.8:
+        return "Very similar meaning"
+    elif score > 0.6:
+        return "Moderately similar"
+    elif score > 0.4:
+        return "Somewhat similar"
+    else:
+        return "Different meanings"
+
+# Example usage
+result = compare_sentences(
+    "I love programming in Python",
+    "Python is my favorite programming language"
+)
+print(f"Similarity: {result['similarity']:.4f}")
+print(f"Interpretation: {result['interpretation']}")
+```
+
+### Exercise 2: Performance Optimization Challenge
+Optimize a semantic search implementation for better performance:
+
+1. Start with this basic implementation:
+```python
+def basic_semantic_search(query, documents, top_k=3):
+    model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    
+    # Generate embeddings for all documents
+    doc_embeddings = model.encode(documents)
+    
+    # Generate query embedding
+    query_embedding = model.encode([query])[0]
+    
+    # Calculate similarities
+    similarities = [
+        util.pytorch_cos_sim(
+            query_embedding.reshape(1, -1),
+            doc_emb.reshape(1, -1)
+        ).item()
+        for doc_emb in doc_embeddings
+    ]
+    
+    # Get top k results
+    top_indices = np.argsort(similarities)[-top_k:][::-1]
+    return [(documents[i], similarities[i]) for i in top_indices]
+```
+
+2. Implement these optimizations:
+   - Batch processing for document encoding
+   - Vectorized similarity calculations
+   - Caching of document embeddings
+   - HNSW index for faster retrieval
+
+Solution:
+```python
+from functools import lru_cache
+import faiss
+import numpy as np
+
+class OptimizedSemanticSearch:
+    def __init__(self, model_name='paraphrase-MiniLM-L6-v2'):
+        self.model = SentenceTransformer(model_name)
+        self.documents = []
+        self.index = None
+        
+    @lru_cache(maxsize=1000)
+    def get_embedding(self, text):
+        return self.model.encode(text)
+    
+    def build_index(self, documents, batch_size=32):
+        self.documents = documents
+        
+        # Batch process documents
+        embeddings = []
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i:i + batch_size]
+            batch_embeddings = self.model.encode(batch)
+            embeddings.extend(batch_embeddings)
+        
+        embeddings = np.array(embeddings).astype('float32')
+        
+        # Build HNSW index
+        d = embeddings.shape[1]
+        self.index = faiss.IndexHNSWFlat(d, 32)
+        self.index.hnsw.efConstruction = 40
+        self.index.add(embeddings)
+    
+    def search(self, query, top_k=3):
+        query_embedding = self.model.encode([query]).astype('float32')
+        self.index.hnsw.efSearch = 20
+        D, I = self.index.search(query_embedding, top_k)
+        
+        return [(self.documents[idx], score) 
+                for idx, score in zip(I[0], D[0])]
+
+# Usage example
+searcher = OptimizedSemanticSearch()
+documents = ["Your example documents here"]
+searcher.build_index(documents)
+results = searcher.search("Your query here")
+```
+
+### Exercise 3: Quality Evaluation
+Implement a comprehensive evaluation suite for semantic search quality:
+
+```python
+class SearchEvaluator:
+    def __init__(self, search_engine):
+        self.search_engine = search_engine
+        
+    def calculate_metrics(self, queries, relevant_docs):
+        """
+        Calculate precision, recall, and mean reciprocal rank
+        
+        Args:
+            queries: List of test queries
+            relevant_docs: Dict mapping queries to lists of relevant documents
+        """
+        metrics = {
+            'precision': [],
+            'recall': [],
+            'mrr': []  # Mean Reciprocal Rank
+        }
+        
+        for query in queries:
+            results = self.search_engine.search(query)
+            retrieved_docs = [doc for doc, _ in results]
+            relevant = relevant_docs[query]
+            
+            # Calculate precision
+            relevant_retrieved = set(retrieved_docs) & set(relevant)
+            precision = len(relevant_retrieved) / len(retrieved_docs)
+            metrics['precision'].append(precision)
+            
+            # Calculate recall
+            recall = len(relevant_retrieved) / len(relevant)
+            metrics['recall'].append(recall)
+            
+            # Calculate MRR
+            mrr = 0
+            for i, doc in enumerate(retrieved_docs, 1):
+                if doc in relevant:
+                    mrr = 1 / i
+                    break
+            metrics['mrr'].append(mrr)
+        
+        # Calculate averages
+        return {
+            'avg_precision': np.mean(metrics['precision']),
+            'avg_recall': np.mean(metrics['recall']),
+            'mean_mrr': np.mean(metrics['mrr'])
+        }
+    
+    def benchmark(self, queries, relevant_docs, test_sizes=[100, 1000, 10000]):
+        """Benchmark search performance with different dataset sizes"""
+        results = {}
+        
+        for size in test_sizes:
+            start_time = time.time()
+            metrics = self.calculate_metrics(queries[:size], 
+                                          {k: relevant_docs[k] 
+                                           for k in queries[:size]})
+            end_time = time.time()
+            
+            results[size] = {
+                'metrics': metrics,
+                'time': end_time - start_time
+            }
+        
+        return results
+
+# Usage example
+evaluator = SearchEvaluator(optimized_search)
+results = evaluator.benchmark(
+    test_queries,
+    relevant_documents,
+    test_sizes=[100, 1000]
+)
+```
+
+This evaluation suite helps you:
+1. Measure search quality using standard metrics
+2. Benchmark performance with different dataset sizes
+3. Compare different search implementations
+
+Try implementing these exercises to gain hands-on experience with semantic search concepts and best practices.
+
+This guide has equipped you with a deep understanding of semantic search and its components. You've built a functional search engine, mastering embeddings, indexing, and retrieval—skills critical for your future in AI and NLP. If you have the necessary libraries installed, you can run the code; otherwise, study the logic to apply it in other contexts. Your journey in advanced search technologies starts here—congratulations!
 
 --- 
 
