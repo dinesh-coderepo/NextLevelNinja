@@ -59,6 +59,9 @@ Write a 2-sentence summary of how semantic search improves over keyword search.
 ### What Are Embeddings?
 Embeddings are dense, fixed-size numerical vectors that represent text (words, sentences, or documents) in a high-dimensional space, where proximity reflects semantic similarity. They transform human language into a format that machines can process mathematically.
 
+```
+Notes: convert the words to vectors in high dimensional space? meaning can we capture the data /any data in higher dimension? how does it deal with incremental data when the whole meaning is changed
+```
 ### Why They Matter
 Embeddings are the foundation of semantic search, allowing systems to quantify meaning and compare text based on context and intent. Mastering embeddings is crucial for applications in NLP, machine learning, and AI.
 
